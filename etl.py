@@ -1,3 +1,7 @@
+"""
+Movie ETL Pipeline - loads movie data from CSVs, enriches with OMDB API, and saves to MySQL
+"""
+
 import pandas as pd
 import requests
 import mysql.connector
@@ -8,60 +12,106 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
+# Load environment variables
 load_dotenv()
 API_KEY = os.getenv("API_KEY ")
 DB_HOST = os.getenv("DB_HOST")
 DB_USER = os.getenv("DB_USER")
 DB_PASS = os.getenv("DB_PASS")
 DB_NAME = os.getenv("DB_NAME")
-MAX_THREADS = 10
+MAX_THREADS = 10  # run 10 API calls in parallel
+
 
 def get_connection():
+    """Connect to MySQL database"""
     try:
-        return mysql.connector.connect(host=DB_HOST, user=DB_USER, password=DB_PASS, database=DB_NAME)
+        return mysql.connector.connect(
+            host=DB_HOST, 
+            user=DB_USER, 
+            password=DB_PASS, 
+            database=DB_NAME
+        )
     except Error:
         return None
 
+
 def fetch_omdb_data(title, retries=3):
+    """
+    Fetch movie info from OMDB API
+    Returns director, plot, box office, and release year
+    """
     for _ in range(retries):
         try:
             url = f"http://www.omdbapi.com/?t={title}&apikey={API_KEY}"
             r = requests.get(url, timeout=20)
             data = r.json()
+            
             if data.get("Response") == "True":
+                # Clean up box office numbers - remove $ and commas
                 box_office = data.get("BoxOffice")
                 if box_office and box_office != "N/A":
-                    box_office = box_office.replace("$","").replace(",","")
+                    box_office = box_office.replace("$", "").replace(",", "")
                 else:
                     box_office = None
+                
                 release_year = pd.to_numeric(data.get("Year"), errors="coerce")
-                return {"title": title, "director": data.get("Director"), "plot": data.get("Plot"),
-                        "box_office": box_office, "release_year": release_year}
+                
+                return {
+                    "title": title,
+                    "director": data.get("Director"),
+                    "plot": data.get("Plot"),
+                    "box_office": box_office,
+                    "release_year": release_year
+                }
         except requests.exceptions.RequestException:
-            sleep(2)
-    return {"title": title, "director": None, "plot": None, "box_office": None, "release_year": None}
+            sleep(2)  # wait a bit before retrying
+    
+    # if all retries fail, return empty data
+    return {
+        "title": title,
+        "director": None,
+        "plot": None,
+        "box_office": None,
+        "release_year": None
+    }
+
 
 def run_etl():
+    """Main ETL process - loads CSVs, fetches OMDB data, and saves to database"""
+    
+    # Load the CSV files
     movies = pd.read_csv("movies.csv")
     ratings = pd.read_csv("ratings.csv")
     tags = pd.read_csv("tags.csv")
+    
     print("Starting ETL process...")
     print(f"Movies loaded: {len(movies)}")
     print(f"Ratings loaded: {len(ratings)}")
     print(f"Tags loaded: {len(tags)}")
+    
+    # Fetch additional movie details from OMDB using multithreading
     details = []
     with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
         futures = {executor.submit(fetch_omdb_data, title): title for title in movies["title"]}
         for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching OMDB data"):
             details.append(future.result())
+    
+    # Merge OMDB data with movies dataframe
     movies = pd.merge(movies, pd.DataFrame(details), on="title", how="left")
+    
+    # Convert columns to proper types
     movies["release_year"] = pd.to_numeric(movies["release_year"], errors="coerce")
     movies["box_office"] = pd.to_numeric(movies["box_office"], errors="coerce")
     ratings["timestamp"] = pd.to_datetime(ratings["timestamp"], unit="s")
+    
+    # Connect to database
     conn = get_connection()
     if not conn:
         return
+    
     cursor = conn.cursor()
+    
+    # Insert movies - update if they already exist
     print("Inserting movies into database...")
     for _, row in movies.iterrows():
         try:
@@ -77,30 +127,43 @@ def run_etl():
             """, (row["title"], row["genres"], row["director"], row["plot"], row["box_office"], row["release_year"]))
         except Error:
             continue
+    
     conn.commit()
     print("Movies table loaded successfully.")
+    
+    # Insert ratings
     print("Inserting ratings into database...")
     for _, row in ratings.iterrows():
         try:
-            cursor.execute("INSERT INTO ratings (user_id, movie_id, rating, timestamp) VALUES (%s,%s,%s,%s)",
-                           (int(row["userId"]), int(row["movieId"]), float(row["rating"]), row["timestamp"]))
+            cursor.execute(
+                "INSERT INTO ratings (user_id, movie_id, rating, timestamp) VALUES (%s,%s,%s,%s)",
+                (int(row["userId"]), int(row["movieId"]), float(row["rating"]), row["timestamp"])
+            )
         except Error:
             continue
+    
     conn.commit()
     print("Ratings table loaded successfully.")
+    
+    # Insert tags
     print("Inserting tags into database...")
     for _, row in tags.iterrows():
         try:
-            cursor.execute("INSERT INTO tags (user_id, movie_id, tag, timestamp) VALUES (%s,%s,%s,%s)",
-                           (int(row["userId"]), int(row["movieId"]), row["tag"], pd.to_datetime(row["timestamp"], unit="s")))
+            cursor.execute(
+                "INSERT INTO tags (user_id, movie_id, tag, timestamp) VALUES (%s,%s,%s,%s)",
+                (int(row["userId"]), int(row["movieId"]), row["tag"], pd.to_datetime(row["timestamp"], unit="s"))
+            )
         except Error:
             continue
+    
     conn.commit()
     print("Tags table loaded successfully.")
+    
     cursor.close()
     conn.close()
+    
     print("ETL completed successfully!")
+
 
 if __name__ == "__main__":
     run_etl()
-
