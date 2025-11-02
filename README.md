@@ -402,8 +402,7 @@ Contributions are welcome! Please follow these steps:
 
 ### Development Setup
 ```bash
-# Install dev dependencies
-pip install -r requirements-dev.txt
+pip install -r requirements.txt
 
 # Run tests
 pytest tests/
