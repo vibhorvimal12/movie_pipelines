@@ -9,11 +9,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
 load_dotenv()
-API_KEY = os.getenv("API_KEY = dd6fbba7")
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_USER = os.getenv("DB_USER", "root")
-DB_PASS = os.getenv("DB_PASS", "802159123#")
-DB_NAME = os.getenv("DB_NAME", "movie_pipeline")
+API_KEY = os.getenv("API_KEY ")
+DB_HOST = os.getenv("DB_HOST")
+DB_USER = os.getenv("DB_USER")
+DB_PASS = os.getenv("DB_PASS")
+DB_NAME = os.getenv("DB_NAME")
 MAX_THREADS = 10
 
 def get_connection():
@@ -103,3 +103,4 @@ def run_etl():
 
 if __name__ == "__main__":
     run_etl()
+
