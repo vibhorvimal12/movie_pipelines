@@ -1,153 +1,349 @@
+# 🎬 Movie Data Pipeline — Data Engineering Assignment (TS Works)
+
+## 📖 Overview
+This project implements a **Movie Data ETL (Extract, Transform, Load) pipeline** that integrates data from the **MovieLens dataset** and enriches it using the **OMDb API**.  
+The goal is to create a structured **MySQL database** combining user ratings and enriched movie details such as director, box office, and plot.
+
+The ETL process is written in **Python** using `pandas`, `SQLAlchemy`, and `requests`, and performs:
+- Data extraction from local CSV files
+- Data cleaning and transformation
+- API enrichment via OMDb
+- Loading into a MySQL database
+- Analytical querying via SQL
+
+---
+
+## 🧱 Project Objectives
+1. **Extract** movie and rating data from the MovieLens CSV files.  
+2. **Transform** and clean the data to handle missing and inconsistent fields.  
+3. **Enrich** the movie data using the OMDb API to fetch director, plot, and box office.  
+4. **Load** the transformed data into MySQL tables.  
+5. **Analyze** the dataset using SQL queries to answer business questions.
+
+---
+
+## 🗂️ Project Structure
+Movie_Data_Pipeline_MySQL/
+├── etl.py             # Main ETL pipeline script
+├── schema.sql         # Database schema (CREATE TABLE statements)
+├── queries.sql        # Analytical SQL queries
+├── requirements.txt   # Python dependencies
+├── data/
+│   ├── movies.csv
+│   ├── ratings.csv
+│   └── links.csv
+└── README.md          # Project documentation
+
+---
+
+## ⚙️ Environment Setup & Execution
+
+### 1️⃣ Prerequisites
+- Python 3.8+
+- MySQL Server installed and running
+- OMDb API key (get a free one from [http://www.omdbapi.com/](http://www.omdbapi.com/))
+
+### 2️⃣ Setup Instructions
+Clone the repository and install dependencies:
+```bash
+git clone <your_repo_link>
+cd Movie_Data_Pipeline_MySQL
+pip install -r requirements.txt
+
+3️⃣ Configure MySQL Database
+Create a new database:
+CREATE DATABASE movie_db;
+
+Update connection settings in etl.py:
+DB_USER = "root"
+DB_PASS = "your_password"
+DB_HOST = "localhost"
+DB_NAME = "movie_db"
+
+4️⃣ Add OMDb API Key
+Create a .env file in the root directory:
+OMDB_API_KEY=your_api_key_here
+
+5️⃣ Run the ETL Pipeline
+Execute:
+python etl.py
+
+This will:
+
+
+Extract and clean MovieLens data
+
+
+Enrich it using OMDb API
+
+
+Load it into your MySQL database
+
+
+6️⃣ Run Analytical Queries
+After the ETL process completes, open MySQL and execute:
+SOURCE queries.sql;
+
+
+🧩 Database Design
+Tables Overview
+TableDescriptionmoviesMovie information from MovieLens + OMDbratingsUser ratings of each moviegenres (optional)Normalized genre data (if expanded)
+Example Schema (schema.sql)
+CREATE TABLE movies (
+  movie_id INT PRIMARY KEY,
+  title VARCHAR(255),
+  year INT,
+  genres VARCHAR(255),
+  director VARCHAR(255),
+  plot TEXT,
+  box_office VARCHAR(50)
+);
+
+CREATE TABLE ratings (
+  user_id INT,
+  movie_id INT,
+  rating FLOAT,
+  timestamp DATETIME,
+  FOREIGN KEY (movie_id) REFERENCES movies(movie_id)
+);
+
+
+🔄 ETL Workflow
+1. Extract
+
+
+Read movies.csv and ratings.csv from MovieLens.
+
+
+Optionally, use links.csv to fetch imdbId for OMDb queries.
+
+
+2. Transform
+
+
+Clean titles, parse genres (pipe-separated → comma-separated).
+
+
+Extract release year from movie titles.
+
+
+Convert timestamps to readable datetime format.
+
+
+Handle missing or invalid entries.
+
+
+3. Enrich
+
+
+Query OMDb API for additional movie metadata.
+
+
+Fetch Director, Plot, and BoxOffice.
+
+
+Handle missing API results gracefully (NULL or default).
+
+
+4. Load
+
+
+Insert data into MySQL tables using SQLAlchemy.
+
+
+Ensure idempotency — re-running the script won’t create duplicates.
+
+
+
+📊 Analytical Queries (queries.sql)
+-- 1️⃣ Highest average-rated movie
+SELECT m.title, AVG(r.rating) AS avg_rating
+FROM ratings r
+JOIN movies m ON m.movie_id = r.movie_id
+GROUP BY m.title
+ORDER BY avg_rating DESC
+LIMIT 1;
+
+-- 2️⃣ Top 5 genres by average rating
+SELECT m.genres, AVG(r.rating) AS avg_rating
+FROM ratings r
+JOIN movies m ON m.movie_id = r.movie_id
+GROUP BY m.genres
+ORDER BY avg_rating DESC
+LIMIT 5;
+
+-- 3️⃣ Director with the most movies
+SELECT director, COUNT(*) AS total_movies
+FROM movies
+GROUP BY director
+ORDER BY total_movies DESC
+LIMIT 1;
+
+-- 4️⃣ Average rating by release year
+SELECT m.year, AVG(r.rating) AS avg_rating
+FROM ratings r
+JOIN movies m ON m.movie_id = r.movie_id
+GROUP BY m.year
+ORDER BY m.year;
+
+
+💡 Design Choices & Assumptions
+
+
+Database: Chose MySQL for its relational design and easy integration with SQLAlchemy.
+
+
+Keys: Used movie_id as the consistent identifier across tables.
+
+
+Genre Handling: Stored as comma-separated text for simplicity.
+
+
+OMDb Lookup: Used imdbId for exact matches; fallback to movie title.
+
+
+ETL Idempotency: Used conditional inserts (ON DUPLICATE KEY UPDATE) to avoid duplicates.
+
+
+
+🚧 Challenges & Solutions
+ChallengeSolutionTitles mismatched between MovieLens and OMDbUsed IMDb ID from links.csv for reliable lookupOMDb rate limitsAdded retry logic and small delays between requestsMissing OMDb fields (e.g., N/A)Stored as NULL and logged missing dataDuplicate insertionsUsed primary key checks and upsert logic
+
+📈 Potential Improvements
+
+
+Use multi-threaded API requests to speed up enrichment.
+
+
+Implement logging and error handling for robustness.
+
+
+Integrate Airflow or Prefect for orchestration.
+
+
+Normalize genres into a separate lookup table.
+
+
+Move analytics layer into a data warehouse (e.g., Redshift or BigQuery).
+
+
+
+📚 Data Source Details
 Summary
-=======
-
-This dataset (ml-latest-small) describes 5-star rating and free-text tagging activity from [MovieLens](http://movielens.org), a movie recommendation service. It contains 100836 ratings and 3683 tag applications across 9742 movies. These data were created by 610 users between March 29, 1996 and September 24, 2018. This dataset was generated on September 26, 2018.
-
-Users were selected at random for inclusion. All selected users had rated at least 20 movies. No demographic information is included. Each user is represented by an id, and no other information is provided.
-
-The data are contained in the files `links.csv`, `movies.csv`, `ratings.csv` and `tags.csv`. More details about the contents and use of all these files follows.
-
-This is a *development* dataset. As such, it may change over time and is not an appropriate dataset for shared research results. See available *benchmark* datasets if that is your intent.
-
-This and other GroupLens data sets are publicly available for download at <http://grouplens.org/datasets/>.
+The dataset (ml-latest-small) describes 5-star rating and free-text tagging activity from MovieLens.
+It contains 100,836 ratings and 3,683 tag applications across 9,742 movies, created by 610 users between March 29, 1996 and September 24, 2018.
+Files
 
 
-Usage License
-=============
-
-Neither the University of Minnesota nor any of the researchers involved can guarantee the correctness of the data, its suitability for any particular purpose, or the validity of results based on the use of the data set. The data set may be used for any research purposes under the following conditions:
-
-* The user may not state or imply any endorsement from the University of Minnesota or the GroupLens Research Group.
-* The user must acknowledge the use of the data set in publications resulting from the use of the data set (see below for citation information).
-* The user may redistribute the data set, including transformations, so long as it is distributed under these same license conditions.
-* The user may not use this information for any commercial or revenue-bearing purposes without first obtaining permission from a faculty member of the GroupLens Research Project at the University of Minnesota.
-* The executable software scripts are provided "as is" without warranty of any kind, either expressed or implied, including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose. The entire risk as to the quality and performance of them is with you. Should the program prove defective, you assume the cost of all necessary servicing, repair or correction.
-
-In no event shall the University of Minnesota, its affiliates or employees be liable to you for any damages arising out of the use or inability to use these programs (including but not limited to loss of data or data being rendered inaccurate).
-
-If you have any further questions or comments, please email <grouplens-info@umn.edu>
+movies.csv — Movie titles and genres
 
 
-Citation
-========
-
-To acknowledge use of the dataset in publications, please cite the following paper:
-
-> F. Maxwell Harper and Joseph A. Konstan. 2015. The MovieLens Datasets: History and Context. ACM Transactions on Interactive Intelligent Systems (TiiS) 5, 4: 19:1–19:19. <https://doi.org/10.1145/2827872>
+ratings.csv — User ratings with timestamps
 
 
-Further Information About GroupLens
-===================================
-
-GroupLens is a research group in the Department of Computer Science and Engineering at the University of Minnesota. Since its inception in 1992, GroupLens's research projects have explored a variety of fields including:
-
-* recommender systems
-* online communities
-* mobile and ubiquitious technologies
-* digital libraries
-* local geographic information systems
-
-GroupLens Research operates a movie recommender based on collaborative filtering, MovieLens, which is the source of these data. We encourage you to visit <http://movielens.org> to try it out! If you have exciting ideas for experimental work to conduct on MovieLens, send us an email at <grouplens-info@cs.umn.edu> - we are always interested in working with external collaborators.
+links.csv — IMDB and TMDB identifiers
 
 
-Content and Use of Files
-========================
-
-Formatting and Encoding
------------------------
-
-The dataset files are written as [comma-separated values](http://en.wikipedia.org/wiki/Comma-separated_values) files with a single header row. Columns that contain commas (`,`) are escaped using double-quotes (`"`). These files are encoded as UTF-8. If accented characters in movie titles or tag values (e.g. Misérables, Les (1995)) display incorrectly, make sure that any program reading the data, such as a text editor, terminal, or script, is configured for UTF-8.
+tags.csv — User-generated tags (not used in this assignment)
 
 
-User Ids
---------
+License & Citation
+The dataset is provided by GroupLens Research, University of Minnesota, under a free educational license.
 
-MovieLens users were selected at random for inclusion. Their ids have been anonymized. User ids are consistent between `ratings.csv` and `tags.csv` (i.e., the same id refers to the same user across the two files).
-
-
-Movie Ids
----------
-
-Only movies with at least one rating or tag are included in the dataset. These movie ids are consistent with those used on the MovieLens web site (e.g., id `1` corresponds to the URL <https://movielens.org/movies/1>). Movie ids are consistent between `ratings.csv`, `tags.csv`, `movies.csv`, and `links.csv` (i.e., the same id refers to the same movie across these four data files).
+F. Maxwell Harper and Joseph A. Konstan. 2015. The MovieLens Datasets: History and Context.
+ACM Transactions on Interactive Intelligent Systems (TiiS) 5, 4: 19:1–19:19.
+https://doi.org/10.1145/2827872
 
 
-Ratings Data File Structure (ratings.csv)
------------------------------------------
+👨‍💻 Author
+Developed by: [Your Name]
+For: TS Works — Data Engineering Assignment
+Database: MySQL
+Contact: youremail@example.com
+Date: November 2025
 
-All ratings are contained in the file `ratings.csv`. Each line of this file after the header row represents one rating of one movie by one user, and has the following format:
+---
 
-    userId,movieId,rating,timestamp
+✅ **This final README.md covers:**
+- All project overview and goals  
+- Environment setup and execution  
+- Schema, ETL logic, and analytical queries  
+- Design choices, challenges, and improvements  
+- Dataset license and citation  
+1. Extract
 
-The lines within this file are ordered first by userId, then, within user, by movieId.
+Read movies.csv and ratings.csv from MovieLens.
 
-Ratings are made on a 5-star scale, with half-star increments (0.5 stars - 5.0 stars).
+Optionally, use links.csv to fetch imdbId for OMDb queries.
 
-Timestamps represent seconds since midnight Coordinated Universal Time (UTC) of January 1, 1970.
+2. Transform
 
+Clean titles, parse genres (pipe-separated → comma-separated).
 
-Tags Data File Structure (tags.csv)
------------------------------------
+Extract release year from movie titles.
 
-All tags are contained in the file `tags.csv`. Each line of this file after the header row represents one tag applied to one movie by one user, and has the following format:
+Convert timestamps to readable datetime format.
 
-    userId,movieId,tag,timestamp
+Handle missing or invalid entries.
 
-The lines within this file are ordered first by userId, then, within user, by movieId.
+3. Enrich
 
-Tags are user-generated metadata about movies. Each tag is typically a single word or short phrase. The meaning, value, and purpose of a particular tag is determined by each user.
+Query OMDb API for additional movie metadata.
 
-Timestamps represent seconds since midnight Coordinated Universal Time (UTC) of January 1, 1970.
+Fetch Director, Plot, and BoxOffice.
 
+Handle missing API results gracefully (NULL or default).
 
-Movies Data File Structure (movies.csv)
----------------------------------------
+4. Load
 
-Movie information is contained in the file `movies.csv`. Each line of this file after the header row represents one movie, and has the following format:
+Insert data into MySQL tables using SQLAlchemy.
 
-    movieId,title,genres
+Ensure idempotency — re-running the script won’t create duplicates.
+Design Choices & Assumptions
 
-Movie titles are entered manually or imported from <https://www.themoviedb.org/>, and include the year of release in parentheses. Errors and inconsistencies may exist in these titles.
+Database: Chose MySQL for its relational design and easy integration with SQLAlchemy.
 
-Genres are a pipe-separated list, and are selected from the following:
+Keys: Used movie_id as the consistent identifier across tables.
 
-* Action
-* Adventure
-* Animation
-* Children's
-* Comedy
-* Crime
-* Documentary
-* Drama
-* Fantasy
-* Film-Noir
-* Horror
-* Musical
-* Mystery
-* Romance
-* Sci-Fi
-* Thriller
-* War
-* Western
-* (no genres listed)
+Genre Handling: Stored as comma-separated text for simplicity.
 
+OMDb Lookup: Used imdbId for exact matches; fallback to movie title.
 
-Links Data File Structure (links.csv)
----------------------------------------
+ETL Idempotency: Used conditional inserts (ON DUPLICATE KEY UPDATE) to avoid duplicates.
 
-Identifiers that can be used to link to other sources of movie data are contained in the file `links.csv`. Each line of this file after the header row represents one movie, and has the following format:
+| **Challenge**                                | **Solution**                                        |
+| -------------------------------------------- | --------------------------------------------------- |
+| Titles mismatched between MovieLens and OMDb | Used IMDb ID from `links.csv` for reliable lookup   |
+| OMDb rate limits                             | Added retry logic and small delays between requests |
+| Missing OMDb fields (e.g., `N/A`)            | Stored as NULL and logged missing data              |
+| Duplicate insertions                         | Used primary key checks and upsert logic            |
+Summary
 
-    movieId,imdbId,tmdbId
+The dataset (ml-latest-small) describes 5-star rating and free-text tagging activity from MovieLens
+.
+It contains 100,836 ratings and 3,683 tag applications across 9,742 movies, created by 610 users between March 29, 1996 and September 24, 2018.
 
-movieId is an identifier for movies used by <https://movielens.org>. E.g., the movie Toy Story has the link <https://movielens.org/movies/1>.
+Files
 
-imdbId is an identifier for movies used by <http://www.imdb.com>. E.g., the movie Toy Story has the link <http://www.imdb.com/title/tt0114709/>.
+movies.csv — Movie titles and genres
 
-tmdbId is an identifier for movies used by <https://www.themoviedb.org>. E.g., the movie Toy Story has the link <https://www.themoviedb.org/movie/862>.
+ratings.csv — User ratings with timestamps
 
-Use of the resources listed above is subject to the terms of each provider.
+links.csv — IMDB and TMDB identifiers
 
+tags.csv — User-generated tags (not used in this assignment)
 
-Cross-Validation
-----------------
+License & Citation
 
-Prior versions of the MovieLens dataset included either pre-computed cross-folds or scripts to perform this computation. We no longer bundle either of these features with the dataset, since most modern toolkits provide this as a built-in feature. If you wish to learn about standard approaches to cross-fold computation in the context of recommender systems evaluation, see [LensKit](http://lenskit.org) for tools, documentation, and open-source code examples.
+The dataset is provided by GroupLens Research, University of Minnesota, under a free educational license.
+
+F. Maxwell Harper and Joseph A. Konstan. 2015. The MovieLens Datasets: History and Context.
+ACM Transactions on Interactive Intelligent Systems (TiiS) 5, 4: 19:1–19:19.
+https://doi.org/10.1145/2827872
+
+Developed by: Vibhor Vimal
+For: TS Works — Data Engineering Assignment
+Database: MySQL
+Contact: vibhorvimalinfo@gmail.com
+
+I
