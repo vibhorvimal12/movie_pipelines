@@ -161,21 +161,17 @@ Progress: 100%|████████████████████| 974
 ## 📁 Project Structure
 
 ```
-movie-data-pipeline/
-├── etl.py                 # Main ETL script
-├── schema.sql             # Database schema (DDL)
-├── queries.sql            # Analytical SQL queries
-├── requirements.txt       # Python dependencies
-├── .env                   # Environment variables (not in repo)
-├── .gitignore            # Git ignore rules
-├── README.md             # This file
-├── data/                 # MovieLens dataset
-│   ├── movies.csv
-│   ├── ratings.csv
-│   ├── links.csv
-│   └── tags.csv
-└── docs/                 # Additional documentation
-    └── API_REFERENCE.md
+movie_pipelines-main/
+├── etl.py
+├── links.csv
+├── movies.csv
+├── queries.sql
+├── ratings.csv
+├── README.md
+├── README.txt
+├── requirements.txt
+├── schema.sql
+└── tags.csv
 ```
 
 ---
